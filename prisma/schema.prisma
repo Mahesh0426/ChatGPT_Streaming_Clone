@@ -1,0 +1,76 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  clerkId   String   @unique
+  email     String?  @unique
+  firstname String?
+  lastname  String?
+  imageUrl  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  conversations Conversation[]
+}
+
+model Conversation {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String @default("New Chat")
+  model     String?  //eg. gpt-3.5-turbo - per-thread model overwrite
+  systemPrompt String? @db.Text
+  isPinned  Boolean  @default(false)
+  isArchived Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  lastMessageAt DateTime @default(now())
+  
+  user User @relation(fields: [userId], references: [id],onDelete: Cascade)
+  messages Message[]
+
+  @@index([userId,lastMessageAt(sort: Desc)])
+  @@index([userId,isPinned,lastMessageAt(sort: Desc)])
+  
+}
+
+enum messageRole{
+  USER
+  ASSISTANT
+  SYSTEM
+  TOOL
+}
+
+enum messageStatus{
+  PENDING  //created before streaming finishes
+  COMPLETE
+  ERROR
+}
+
+model Message{
+  id String @id @default(uuid())
+  coversationId String
+  role messageRole
+  status messageStatus @default(COMPLETE)
+  content String @db.Text
+  parts Json?          // for multipart responses like text+tool calls
+  metadata Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  conversation Conversation @relation(fields: [coversationId], references: [id],onDelete: Cascade)
+  
+   @@index([coversationId,createdAt(sort:Asc)])
+  
+}

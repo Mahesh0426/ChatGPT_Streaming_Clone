@@ -23,7 +23,7 @@ CREATE TABLE "Conversation" (
 -- CreateTable
 CREATE TABLE "Message" (
     "id" TEXT NOT NULL,
-    "coversationId" TEXT NOT NULL,
+    "conversationId" TEXT NOT NULL,
     "role" "messageRole" NOT NULL,
     "status" "messageStatus" NOT NULL DEFAULT 'COMPLETE',
     "content" TEXT NOT NULL,
@@ -42,10 +42,10 @@ CREATE INDEX "Conversation_userId_lastMessageAt_idx" ON "Conversation"("userId",
 CREATE INDEX "Conversation_userId_isPinned_lastMessageAt_idx" ON "Conversation"("userId", "isPinned", "lastMessageAt" DESC);
 
 -- CreateIndex
-CREATE INDEX "Message_coversationId_createdAt_idx" ON "Message"("coversationId", "createdAt" ASC);
+CREATE INDEX "Message_conversationId_createdAt_idx" ON "Message"("conversationId", "createdAt" ASC);
 
 -- AddForeignKey
 ALTER TABLE "Conversation" ADD CONSTRAINT "Conversation_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Message" ADD CONSTRAINT "Message_coversationId_fkey" FOREIGN KEY ("coversationId") REFERENCES "Conversation"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Message" ADD CONSTRAINT "Message_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "Conversation"("id") ON DELETE CASCADE ON UPDATE CASCADE;

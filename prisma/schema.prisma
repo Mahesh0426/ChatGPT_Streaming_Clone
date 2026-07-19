@@ -60,7 +60,7 @@ enum messageStatus{
 
 model Message{
   id String @id @default(uuid())
-  coversationId String
+  conversationId String
   role messageRole
   status messageStatus @default(COMPLETE)
   content String @db.Text
@@ -69,8 +69,8 @@ model Message{
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  conversation Conversation @relation(fields: [coversationId], references: [id],onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id],onDelete: Cascade)
   
-   @@index([coversationId,createdAt(sort:Asc)])
+   @@index([conversationId,createdAt(sort:Asc)])
   
 }

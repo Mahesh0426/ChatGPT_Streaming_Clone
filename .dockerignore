@@ -1,0 +1,38 @@
+# ── Version Control ───────────────────────────────────────────────────────────
+.git
+.gitignore
+
+# ── Next.js Build Output ──────────────────────────────────────────────────────
+.next
+
+# ── Node Modules ──────────────────────────────────────────────────────────────
+node_modules
+
+# ── Environment Files (never bake secrets into image layers) ─────────────────
+.env
+.env.*
+!.env.example
+
+# ── Development / Editor Artifacts ───────────────────────────────────────────
+*.md
+.agents/
+.gemini/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+coverage/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+
+# ── OS Files ─────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Type Check Build Info ─────────────────────────────────────────────────────
+tsconfig.tsbuildinfo

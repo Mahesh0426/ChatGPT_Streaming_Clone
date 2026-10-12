@@ -1,0 +1,67 @@
+# ──────────────────────────────────────────────────────────────────────────────
+#  docker-compose.yml – ChatGPT Streaming Clone
+#
+#  Services:
+#    • db      – PostgreSQL 16 (persisted via named volume)
+#    • app     – Next.js application (standalone output)
+#
+#  Usage:
+#    1. cp .env.example .env  →  fill in your real values
+#    2. docker compose up --build
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+  # ────────────────────────────────────────────────────────────────────────────
+  #  PostgreSQL Database
+  # ────────────────────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: chatgpt_clone_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-chatgpt_clone}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ────────────────────────────────────────────────────────────────────────────
+  #  Next.js Application
+  # ────────────────────────────────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # NEXT_PUBLIC_* vars must be known at build time (baked into JS bundle)
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+        NEXT_PUBLIC_CLERK_SIGN_IN_URL: ${NEXT_PUBLIC_CLERK_SIGN_IN_URL:-/sign-in}
+        NEXT_PUBLIC_CLERK_SIGN_UP_URL: ${NEXT_PUBLIC_CLERK_SIGN_UP_URL:-/sign-up}
+    container_name: chatgpt_clone_app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      # Runtime secrets — injected from .env, never baked into the image
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-chatgpt_clone}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      # Re-expose public vars at runtime as well (some libs read them server-side)
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+      NEXT_PUBLIC_CLERK_SIGN_IN_URL: ${NEXT_PUBLIC_CLERK_SIGN_IN_URL:-/sign-in}
+      NEXT_PUBLIC_CLERK_SIGN_UP_URL: ${NEXT_PUBLIC_CLERK_SIGN_UP_URL:-/sign-up}
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:
+    name: chatgpt_clone_postgres_data

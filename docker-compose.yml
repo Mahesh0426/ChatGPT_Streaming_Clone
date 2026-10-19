@@ -20,7 +20,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-chatgpt_clone}
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -31,6 +31,24 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # ────────────────────────────────────────────────────────────────────────────
+  #  One-off migration runner (uses the builder stage, which has the Prisma CLI)
+  # ────────────────────────────────────────────────────────────────────────────
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+      args:
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+    command: ["pnpm", "prisma", "migrate", "deploy"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-chatgpt_clone}
+    restart: "no"
 
   # ────────────────────────────────────────────────────────────────────────────
   #  Next.js Application
@@ -49,10 +67,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       NODE_ENV: production
       # Runtime secrets — injected from .env, never baked into the image
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-chatgpt_clone}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-chatgpt_clone}
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       # Re-expose public vars at runtime as well (some libs read them server-side)

@@ -5,6 +5,9 @@
 # ── Next.js Build Output ──────────────────────────────────────────────────────
 .next
 
+# ── Generated Prisma Client (regenerated inside the image) ───────────────────
+lib/generated
+
 # ── Node Modules ──────────────────────────────────────────────────────────────
 node_modules
 

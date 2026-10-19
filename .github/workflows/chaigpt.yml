@@ -1,0 +1,149 @@
+name: CI/CD – ChatGPT Streaming Clone
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+# Cancel an in-progress run for the same branch when a newer commit lands
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────────
+  #  CI – lint, type-check and verify the Docker image builds
+  # ────────────────────────────────────────────────────────────────────────────
+  ci:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.22.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # postinstall runs `prisma generate`, so the client exists for tsc/lint
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Type-check
+        run: pnpm exec tsc --noEmit
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Builds the production image exactly as the VPS will (not pushed)
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+
+  # ────────────────────────────────────────────────────────────────────────────
+  #  CD – deploy to the VPS (only on push to main, after CI passes)
+  # ────────────────────────────────────────────────────────────────────────────
+  deploy:
+    needs: ci
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate deployment secrets
+        env:
+          VPS_APP_DIR: ${{ secrets.VPS_APP_DIR }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          missing=0
+          for name in \
+            VPS_APP_DIR VPS_HOST VPS_USER SSH_KEY \
+            POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB \
+            NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY CLERK_SECRET_KEY OPENAI_API_KEY; do
+            if [ -z "$(printenv "$name")" ]; then
+              echo "::error::Missing required GitHub Actions secret: $name"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          APP_DIR: ${{ secrets.VPS_APP_DIR }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          envs: APP_DIR,POSTGRES_USER,POSTGRES_PASSWORD,POSTGRES_DB,NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,CLERK_SECRET_KEY,OPENAI_API_KEY
+          script: |
+            set -e          # ← Stop immediately if any command fails
+
+            git config --global --add safe.directory "$APP_DIR"
+
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "🚀 Deploying ChatGPT Streaming Clone..."
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+            # ── Pull latest code ──
+            cd "$APP_DIR"
+            git fetch origin main
+            git reset --hard origin/main
+            echo "✅ Code updated"
+
+            # ── Overwrite .env fresh every deploy (read by docker compose) ──
+            umask 077
+            cat > .env << EOF
+            POSTGRES_USER=${POSTGRES_USER}
+            POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+            POSTGRES_DB=${POSTGRES_DB}
+            NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+            NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
+            NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
+            CLERK_SECRET_KEY=${CLERK_SECRET_KEY}
+            OPENAI_API_KEY=${OPENAI_API_KEY}
+            EOF
+            echo "✅ .env created"
+
+            # ── Rebuild & restart (migrate service runs before app starts) ──
+            sudo docker compose up -d --build
+            echo "✅ Containers rebuilt and restarted"
+
+            sudo docker image prune -f
+            echo "✅ Cleanup done"
+
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "🎉 Deployment successful!"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

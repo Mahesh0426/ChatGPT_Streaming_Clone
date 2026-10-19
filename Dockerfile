@@ -1,15 +1,19 @@
 # ──────────────────────────────────────────────────────────────────────────────
 #  Stage 1 – deps
-#  Install ONLY production dependencies so we can copy node_modules later.
+#  Install all dependencies and generate the Prisma client.
 # ──────────────────────────────────────────────────────────────────────────────
 FROM node:22-alpine AS deps
 WORKDIR /app
 
 # Install pnpm globally
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10.22.0 --activate
 
 # Copy package manifests
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+
+# postinstall runs `prisma generate`, which needs the schema and config
+COPY prisma.config.ts ./
+COPY prisma ./prisma
 
 # Install all deps (postinstall runs prisma generate)
 # DATABASE_URL is not needed at install time – prisma generate does not connect
@@ -23,7 +27,7 @@ RUN pnpm install --frozen-lockfile
 FROM node:22-alpine AS builder
 WORKDIR /app
 
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10.22.0 --activate
 
 # Copy installed node_modules and generated Prisma client from deps stage
 COPY --from=deps /app/node_modules ./node_modules

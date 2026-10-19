@@ -219,6 +219,27 @@ docker compose down -v
 | `NEXT_PUBLIC_CLERK_SIGN_UP_URL` | ✅ | Sign-up redirect path (e.g. `/sign-up`) |
 | `OPENAI_API_KEY` | ✅ | OpenAI API key for chat completions |
 
+### GitHub Actions deployment secrets
+
+To enable deployments from pushes to `main`, add the following repository
+secrets under **Settings → Secrets and variables → Actions**:
+
+| Secret | Description |
+|:---|:---|
+| `VPS_HOST` | VPS hostname or IP address |
+| `VPS_USER` | SSH username on the VPS |
+| `SSH_KEY` | Private SSH key authorized on the VPS |
+| `VPS_APP_DIR` | Absolute path to the cloned application directory on the VPS |
+| `POSTGRES_USER` | PostgreSQL username |
+| `POSTGRES_PASSWORD` | PostgreSQL password |
+| `POSTGRES_DB` | PostgreSQL database name |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk publishable key |
+| `CLERK_SECRET_KEY` | Clerk secret key |
+| `OPENAI_API_KEY` | OpenAI API key |
+
+The deploy job checks that all of these secrets are present and reports missing
+names before attempting to connect to the VPS. Secret values are never printed.
+
 ---
 
 ## 🤝 Contributing

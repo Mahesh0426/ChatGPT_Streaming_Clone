@@ -11,11 +11,18 @@ import {
   createIdGenerator,
   createUIMessageStream,
   createUIMessageStreamResponse,
+  isTextUIPart,
   streamText,
   toUIMessageStream,
   type UIMessage,
 } from "ai";
 import { getChatModel } from "@/features/ai/utils/model";
+import {
+  checkMessageLimits,
+  MAX_HISTORY_MESSAGES,
+  MAX_MESSAGE_CHARS,
+  MAX_OUTPUT_TOKENS,
+} from "@/features/ai/utils/usage-limits";
 
 /**
  * POST /api/chat — Streams an AI assistant reply for a conversation.
@@ -53,6 +60,37 @@ export async function POST(req: Request) {
     (storedMessage) => storedMessage.id === message.id,
   );
 
+  // only allow re-sending the latest unanswered message, so a saved prompt
+  // can't be replayed to get free replies outside the usage limit
+  if (alreadySaved && previousMessages.at(-1)?.id !== message.id) {
+    return new Response("This message has already been answered.", {
+      status: 409,
+    });
+  }
+
+  if (!alreadySaved) {
+    if (message.role !== "user") {
+      return new Response("Only user messages can be sent.", { status: 400 });
+    }
+
+    const text = message.parts
+      .filter(isTextUIPart)
+      .map((part) => part.text)
+      .join("");
+
+    if (text.length > MAX_MESSAGE_CHARS) {
+      return new Response(
+        `Message is too long. Please keep it under ${MAX_MESSAGE_CHARS} characters.`,
+        { status: 413 },
+      );
+    }
+
+    const limitError = await checkMessageLimits(user.id);
+    if (limitError) {
+      return new Response(limitError, { status: 429 });
+    }
+  }
+
   //if message is not saved in DB then save it otherswie use previous messages
   const messages = alreadySaved
     ? previousMessages
@@ -66,7 +104,11 @@ export async function POST(req: Request) {
     model: getChatModel(conversation.model),
     system:
       conversation.systemPrompt ?? "You are ChaiGpt , a helpful assistant",
-    messages: await convertToModelMessages(messages),
+    // cap context and reply size to keep per-request cost bounded
+    messages: await convertToModelMessages(
+      messages.slice(-MAX_HISTORY_MESSAGES),
+    ),
+    maxOutputTokens: MAX_OUTPUT_TOKENS,
   });
 
   result.consumeStream();

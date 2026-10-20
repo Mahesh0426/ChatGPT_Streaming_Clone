@@ -13,6 +13,7 @@ import {
   MessageResponse,
 } from "@/components/ai-elements/message";
 import { Loader } from "@/components/ai-elements/loader";
+import { useSmoothText } from "../hooks/use-smooth-text";
 
 /** Extracts plain text from a `UIMessage` by joining all text parts. */
 function getMessageText(message: UIMessage) {
@@ -20,6 +21,12 @@ function getMessageText(message: UIMessage) {
     .filter(isTextUIPart)
     .map((part) => part.text)
     .join("");
+}
+
+/** Renders message text, typing out the reply that is currently streaming. */
+function MessageText({ text, animate }: { text: string; animate: boolean }) {
+  const shown = useSmoothText(text, animate);
+  return <MessageResponse>{shown}</MessageResponse>;
 }
 
 type ChatMessagesProps = {
@@ -36,10 +43,17 @@ export function ChatMessages({ messages, status }: ChatMessagesProps) {
   return (
     <Conversation>
       <ConversationContent className="py-8">
-        {messages.map((message) => (
+        {messages.map((message, index) => (
           <Message key={message.id} from={message.role}>
             <MessageContent>
-              <MessageResponse>{getMessageText(message)}</MessageResponse>
+              <MessageText
+                text={getMessageText(message)}
+                animate={
+                  status === "streaming" &&
+                  index === messages.length - 1 &&
+                  message.role === "assistant"
+                }
+              />
             </MessageContent>
           </Message>
         ))}

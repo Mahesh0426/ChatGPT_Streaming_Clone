@@ -1,9 +1,11 @@
 import { onBoard } from "@/features/auth/action/onboard";
 import { ChatShell } from "@/features/conversation/components/chat-shell";
 import { auth } from "@clerk/nextjs/server";
+import { connection } from "next/server";
 import React from "react";
 
 const RootGrouplayout = async ({ children }: { children: React.ReactNode }) => {
+  await connection();
   await auth.protect();
   await onBoard();
 

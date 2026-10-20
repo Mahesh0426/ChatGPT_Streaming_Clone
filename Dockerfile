@@ -19,9 +19,31 @@ COPY prisma ./prisma
 # DATABASE_URL is not needed at install time – prisma generate does not connect
 RUN pnpm install --frozen-lockfile
 
+# Record the locked Prisma CLI version so the migration tool uses the same version.
+RUN node -p "require('./node_modules/prisma/package.json').version" > /app/.prisma-version
+
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  Stage 2 – builder
+#  Stage 2 – prisma-cli
+#  Install only the Prisma CLI needed by the one-off migration container.
+# ──────────────────────────────────────────────────────────────────────────────
+FROM node:22-alpine AS prisma-cli
+WORKDIR /migrate
+
+RUN apk add --no-cache openssl
+COPY --from=deps /app/.prisma-version /tmp/.prisma-version
+
+RUN npm init -y > /dev/null && \
+    npm install --omit=dev --no-audit --no-fund \
+      prisma@$(cat /tmp/.prisma-version) dotenv && \
+    npm cache clean --force
+
+COPY prisma.config.ts ./
+COPY prisma ./prisma
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#  Stage 3 – builder
 #  Build the Next.js app (output: "standalone").
 # ──────────────────────────────────────────────────────────────────────────────
 FROM node:22-alpine AS builder
@@ -53,11 +75,13 @@ RUN pnpm build
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-#  Stage 3 – runner
-#  Minimal production image — only the standalone output + static assets.
+#  Stage 4 – runner
+#  One production image for both the app and one-off migration container.
 # ──────────────────────────────────────────────────────────────────────────────
 FROM node:22-alpine AS runner
 WORKDIR /app
+
+RUN apk add --no-cache openssl
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -74,6 +98,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 # Copy public folder
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+
+# Include the isolated Prisma CLI for the migration service.
+COPY --from=prisma-cli --chown=nextjs:nodejs /migrate /migrate
 
 USER nextjs
 

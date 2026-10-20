@@ -123,13 +123,10 @@ cp .env.example .env
 ```
 
 ```env
-# ── Database ───────────────────────────────────────────────────────────────────
-DATABASE_URL="postgresql://username:password@localhost:5432/chatgpt_clone"
-
-# ── Docker Compose Postgres (only needed when using docker-compose) ────────────
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=your_strong_password_here
-POSTGRES_DB=chatgpt_clone
+# ── Neon Database ──────────────────────────────────────────────────────────────
+# Use your Neon direct connection string (not the -pooler hostname) so Prisma
+# migrations can run. URL-encode any special characters in the password.
+DATABASE_URL="postgresql://USER:PASSWORD@YOUR_NEON_HOST/DB_NAME?sslmode=require"
 
 # ── Clerk Authentication ────────────────────────────────────────────────────────
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
@@ -139,7 +136,22 @@ NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
 
 # ── OpenAI ─────────────────────────────────────────────────────────────────────
 OPENAI_API_KEY=sk-proj-...
+
+# Optional: only for creating a disposable test user in a Clerk test instance
+TEST_USER_EMAIL=your_test_email@example.com
+TEST_USER_PASSWORD=choose_a_unique_test_password
 ```
+
+To create the optional test account and sync it to the app database, first
+ensure the database migrations have been applied, then run:
+
+```bash
+pnpm create:test-user
+```
+
+The script requires Clerk test keys (`pk_test_...` and `sk_test_...`), reads
+the test credentials from `.env`, and never stores the password in the app
+database. Do not use a real account password.
 
 **4. Push the database schema**
 
@@ -159,15 +171,15 @@ Open [http://localhost:3000](http://localhost:3000) in your browser. 🎉
 
 ---
 
-### Option B — Docker Compose (App + Database)
+### Option B — Docker Compose (App + Neon)
 
-Spin up both the Next.js application and a PostgreSQL 16 database with a single command:
+Build and start the Next.js application. It connects to your existing Neon PostgreSQL database; Compose runs pending Prisma migrations before starting the app.
 
 **1. Copy and fill in the environment file**
 
 ```bash
 cp .env.example .env
-# Edit .env — set POSTGRES_PASSWORD, CLERK keys, and OPENAI_API_KEY
+# Edit .env — set your Neon DATABASE_URL, Clerk keys, and OPENAI_API_KEY
 ```
 
 **2. Build and start all services**
@@ -176,15 +188,12 @@ cp .env.example .env
 docker compose up --build
 ```
 
-The app will be available at [http://localhost:3000](http://localhost:3000).
-PostgreSQL data is persisted in a named Docker volume (`chatgpt_clone_postgres_data`).
+The app will be available at [http://localhost:3000](http://localhost:3000). Database data is managed by Neon.
 
 **3. Stop services**
 
 ```bash
 docker compose down
-# To also remove the database volume:
-docker compose down -v
 ```
 
 ---
@@ -197,6 +206,7 @@ docker compose down -v
 | `pnpm build` | Build the application for production |
 | `pnpm start` | Start the built production server |
 | `pnpm lint` | Run ESLint checks |
+| `pnpm create:test-user` | Create a disposable Clerk test account and sync its profile to the database |
 | `pnpm prisma generate` | Regenerate the Prisma client from the schema |
 | `pnpm prisma db push` | Push schema changes directly to the database (no migration file) |
 | `pnpm prisma migrate dev` | Create and apply a new migration (development) |
@@ -209,15 +219,14 @@ docker compose down -v
 
 | Variable | Required | Description |
 |:---|:---:|:---|
-| `DATABASE_URL` | ✅ | PostgreSQL connection string |
-| `POSTGRES_USER` | Docker only | Postgres username for docker-compose |
-| `POSTGRES_PASSWORD` | Docker only | Postgres password for docker-compose |
-| `POSTGRES_DB` | Docker only | Database name for docker-compose |
+| `DATABASE_URL` | ✅ | Neon direct PostgreSQL connection string |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | ✅ | Clerk public key (baked into JS bundle) |
 | `CLERK_SECRET_KEY` | ✅ | Clerk secret key (server-side only) |
 | `NEXT_PUBLIC_CLERK_SIGN_IN_URL` | ✅ | Sign-in redirect path (e.g. `/sign-in`) |
 | `NEXT_PUBLIC_CLERK_SIGN_UP_URL` | ✅ | Sign-up redirect path (e.g. `/sign-up`) |
 | `OPENAI_API_KEY` | ✅ | OpenAI API key for chat completions |
+| `TEST_USER_EMAIL` | Optional | Email for a disposable account in a Clerk test instance |
+| `TEST_USER_PASSWORD` | Optional | Password for that test account; stored only in `.env` and Clerk |
 
 ### GitHub Actions deployment secrets
 
@@ -230,9 +239,7 @@ secrets under **Settings → Secrets and variables → Actions**:
 | `VPS_USER` | SSH username on the VPS |
 | `SSH_KEY` | Private SSH key authorized on the VPS |
 | `VPS_APP_DIR` | Absolute path to the cloned application directory on the VPS |
-| `POSTGRES_USER` | PostgreSQL username |
-| `POSTGRES_PASSWORD` | PostgreSQL password |
-| `POSTGRES_DB` | PostgreSQL database name |
+| `DATABASE_URL` | Neon direct PostgreSQL connection string |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk publishable key |
 | `CLERK_SECRET_KEY` | Clerk secret key |
 | `OPENAI_API_KEY` | OpenAI API key |

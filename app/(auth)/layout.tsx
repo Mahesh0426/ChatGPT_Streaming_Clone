@@ -1,7 +1,7 @@
 import React from "react";
 
 /**
- * Centered layout wrapper for authentication pages (sign-in).
+ * Centered layout wrapper for authentication pages (sign-in, sign-up).
  */
 const AuthLayout = ({ children }: { children: React.ReactNode }) => {
   return (

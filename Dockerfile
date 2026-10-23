@@ -89,6 +89,9 @@ RUN apk add --no-cache openssl
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+# Resolve IPv4 addresses first: the container has no IPv6 route, so connecting
+# to IPv6 addresses (e.g. Neon's) hangs until the connection times out
+ENV NODE_OPTIONS=--dns-result-order=ipv4first
 
 # Create a non-root user for security
 RUN addgroup --system --gid 1001 nodejs && \
